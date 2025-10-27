@@ -1,0 +1,692 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.of.attendLeave.modules.attn.AttnMapper">
+    <sql id="AttendanceColumns">
+        ad.ad_idx              AS adIdx,
+		ad.company_idx         AS companyIdx,
+		ad.oid                 AS oid,
+		ad.work_date           AS workDate,
+		ad.status              AS status,
+		ad.version             AS version,
+		ad.plan_in             AS planIn,
+		ad.plan_out            AS planOut,
+		ad.check_in            AS checkIn,
+		ad.check_in_src        AS checkInSrc,
+		ad.check_out           AS checkOut,
+		ad.check_out_src       AS checkOutSrc,
+		ad.break_minutes       AS breakMinutes,
+		ad.work_minutes        AS workMinutes,
+		ad.late_minutes        AS lateMinutes,
+		ad.early_leave_minutes AS earlyLeaveMinutes,
+		ad.overtime_minutes    AS overtimeMinutes,
+		ad.anomaly_code        AS anomalyCode,
+		ad.notes               AS notes
+    </sql>
+
+    <sql id="AttendancePolicyColumns">
+        ap.ap_idx                 AS apIdx,
+        ap.oid                    AS oid,
+        ap.company_idx            AS companyIdx,
+        ap.tid                    AS tid,
+        DATE_FORMAT(ap.plan_in, '%H:%i')   AS planIn,
+        DATE_FORMAT(ap.plan_out, '%H:%i')  AS planOut,
+        ap.break_minutes          AS breakMinutes,
+        ap.auto_break_enabled     AS autoBreakEnabled,
+        ap.late_grace_min         AS lateGraceMin,
+        ap.early_grace_min        AS earlyGraceMin,
+        ap.overtime_enabled       AS overtimeEnabled,
+        ap.work_standard_minutes  AS workStandardMinutes,
+        ap.overtime_threshold_min AS overtimeThresholdMin,
+        ap.gps_check_enabled      AS gpsCheckEnabled,
+        ap.gps_check_radius       AS gpsCheckRadius,
+        ap.office_latitude        AS officeLatitude,
+        ap.office_longitude       AS officeLongitude,
+        ap.notification_enabled   AS notificationEnabled,
+        ap.teams_notification     AS teamsNotification,
+        ap.annual_leave_auto_grant AS annualLeaveAutoGrant,
+        ap.annual_leave_grant_mmdd AS annualLeaveGrantMmdd,
+        ap.carry_over_max_days    AS carryOverMaxDays,
+        ap.rounding_unit_min      AS roundingUnitMin,
+        ap.rounding_mode          AS roundingMode,
+        ap.created_by             AS createdBy,
+        ap.created_at             AS createdAt,
+        ap.updated_by             AS updatedBy,
+        ap.updated_at             AS updatedAt,
+        ap.active_yn              AS activeYn,
+        ap.from_date              AS fromDate,
+        ap.to_date                AS toDate,
+        ap.priority               AS priority,
+        ap.reason                 AS reason
+    </sql>
+
+    <select id="findActiveCompanies" resultType="map">
+        SELECT * FROM company_info WHERE use_yn = 1
+    </select>
+
+    <select id="findActiveByCompany" parameterType="int" resultType="map">
+        SELECT e.oid, e.tid, e.name, e.company_idx, ei.company_name
+        FROM employee e
+        JOIN company_info ei
+        ON e.tid = ei.tid
+        WHERE e.company_idx = #{companyIdx}
+        AND e.enable = 1
+        AND ei.use_yn = 1
+    </select>
+
+    <select id="existEmp" parameterType="map" resultType="int">
+        SELECT COUNT(*) FROM employee e WHERE e.company_idx = #{companyIdx} AND e.oid = #{oid}
+    </select>
+
+    <select id="existAttendance" parameterType="map" resultType="int">
+        SELECT COUNT(*) FROM attendance_day
+        WHERE company_idx = #{companyIdx} AND oid = #{oid} AND work_date = #{workDate}
+    </select>
+
+    <insert id="attendanceInsert" parameterType="map">
+        INSERT INTO attendance_day (
+            company_idx, tid, oid, work_date, plan_in, plan_out
+        )
+        SELECT #{companyIdx}, #{tid}, #{oid}, #{workDate},
+        /* 유효 정책 plan_in */
+        (
+            SELECT ap.plan_in
+            FROM attendance_policy ap
+            WHERE ap.company_idx = #{companyIdx}
+            AND ap.tid           = #{tid}
+            AND ap.oid           = #{oid}
+            AND ap.active_yn     = 1
+            AND #{workDate} BETWEEN ap.from_Date AND ap.to_date
+            ORDER BY ap.ap_idx DESC
+            LIMIT 1
+        ) AS plan_in,
+        /* 유효 정책 plan_out */
+        (
+            SELECT ap.plan_out
+            FROM attendance_policy ap
+            WHERE ap.company_idx = #{companyIdx}
+            AND ap.tid           = #{tid}
+            AND ap.oid           = #{oid}
+            AND ap.active_yn     = 1
+            AND #{workDate} BETWEEN ap.from_Date AND ap.to_date
+            ORDER BY ap.ap_idx DESC
+            LIMIT 1
+        ) AS plan_out
+        FROM DUAL
+        WHERE NOT EXISTS (
+            SELECT 1 FROM attendance_day d
+            WHERE d.company_idx = #{companyIdx}
+            AND d.tid           = #{tid}
+            AND d.oid           = #{oid}
+            AND d.work_date     = #{workDate}
+        )
+    </insert>
+
+    <select id="findAttendanceTodayByOid" parameterType="map" resultType="Integer">
+        SELECT COUNT(*) FROM attendance_day
+        WHERE company_idx = #{companyIdx}
+        AND oid = #{oid}
+        AND work_date = #{workDate}
+    </select>
+
+    <insert id="insertAttendanceToday" parameterType="map">
+        INSERT INTO attendance_day (
+            company_idx, tid, oid, work_date, plan_in, plan_out
+        )
+        SELECT #{companyIdx}, #{tid}, #{oid}, #{workDate},
+        /* 유효 정책 plan_in */
+        (
+           SELECT ap.plan_in
+           FROM attendance_policy ap
+           WHERE ap.company_idx = #{companyIdx}
+             AND ap.tid           = #{tid}
+             AND ap.oid           = #{oid}
+             AND ap.active_yn     = 1
+             AND #{workDate} BETWEEN ap.from_Date AND ap.to_date
+           ORDER BY ap.ap_idx DESC
+           LIMIT 1
+        ) AS plan_in,
+        /* 유효 정책 plan_out */
+        (
+            SELECT ap.plan_out
+            FROM attendance_policy ap
+            WHERE ap.company_idx = #{companyIdx}
+            AND ap.tid           = #{tid}
+            AND ap.oid           = #{oid}
+            AND ap.active_yn     = 1
+            AND #{workDate} BETWEEN ap.from_Date AND ap.to_date
+            ORDER BY ap.ap_idx DESC
+            LIMIT 1
+        ) AS plan_out
+        FROM DUAL
+        WHERE NOT EXISTS (
+            SELECT 1 FROM attendance_day d
+            WHERE d.company_idx = #{companyIdx}
+            AND d.tid           = #{tid}
+            AND d.oid           = #{oid}
+            AND d.work_date     = #{workDate}
+        )
+    </insert>
+
+    <update id="updateCommuteTodayByOid" parameterType="map">
+        UPDATE attendance_day SET
+        status = #{status},
+        <if test="type == 'IN'">
+            check_in = #{timestamp},
+            check_in_src = #{source}
+        </if>
+        <if test="type == 'OUT'">
+            check_out = #{timestamp},
+            check_out_src = #{source}
+        </if>
+        WHERE company_idx = #{companyIdx}
+        AND oid = #{oid}
+        AND work_date = #{workDate}
+    </update>
+
+    <update id="updateCheckoutAndRecalc" parameterType="map">
+        UPDATE attendance_day d
+        LEFT JOIN attendance_policy p1
+        ON p1.ap_idx = (
+            SELECT ap.ap_idx
+            FROM attendance_policy ap
+            WHERE ap.company_idx = d.company_idx
+              AND ap.tid           = d.tid
+              AND ap.oid           = d.oid
+              AND ap.active_yn     = 1
+            ORDER BY ap.created_at DESC, ap.ap_idx DESC
+            LIMIT 1
+        )
+        LEFT JOIN attendance_policy p2
+        ON p2.ap_idx = (
+            SELECT ap2.ap_idx
+            FROM attendance_policy ap2
+            WHERE ap2.company_idx = d.company_idx
+            AND ap2.tid           = d.tid
+            AND ap2.oid           = 'SYSTEM'
+            AND ap2.active_yn     = 1
+            ORDER BY ap2.created_at DESC, ap2.ap_idx DESC
+            LIMIT 1
+        )
+            SET
+		<![CDATA[
+        -- 1) 휴게 확정
+        d.break_minutes = coalesce( d.break_minutes,
+        CASE
+        WHEN IFNULL(p1.auto_break_enabled, p2.auto_break_enabled) = 1 THEN IFNULL(p1.break_minutes, p2.break_minutes)
+        ELSE 0
+        end ),
+        -- 2) 실근무(분)
+        d.work_minutes =
+        CASE
+        WHEN IFNULL(p1.rounding_unit_min, p2.rounding_unit_min) > 0 THEN round( ( greatest( 0, timestampdiff( minute, d.check_in,
+        CASE
+        WHEN #{timestamp} < d.check_in THEN date_add(#{timestamp}, INTERVAL 1 day)
+        ELSE #{timestamp}
+        end ) - (
+        CASE
+        WHEN IFNULL(p1.auto_break_enabled, p2.auto_break_enabled) = 1 THEN coalesce(d.break_minutes,0)
+        ELSE 0
+        end) ) ) / IFNULL(p1.rounding_unit_min, p2.rounding_unit_min) ) * IFNULL(p1.rounding_unit_min, p2.rounding_unit_min)
+        ELSE greatest( 0, timestampdiff( minute, d.check_in,
+        CASE
+        WHEN #{timestamp} < d.check_in THEN date_add(#{timestamp}, INTERVAL 1 day)
+        ELSE #{timestamp}
+        end ) - (
+        CASE
+        WHEN IFNULL(p1.auto_break_enabled, p2.auto_break_enabled) = 1 THEN coalesce(d.break_minutes,0)
+        ELSE 0
+        end) )
+        end,
+		-- 3) 지각(분)
+		d.late_minutes =
+		CASE
+			WHEN IFNULL(p1.rounding_unit_min, p2.rounding_unit_min) > 0 THEN round( (
+                greatest( 0, timestampdiff( minute, timestamp(concat(d.work_date,' ', IFNULL(p1.plan_in, p2.plan_in))), d.check_in ) - IFNULL(p1.late_grace_min, p2.late_grace_min) ) )
+                / IFNULL(p1.rounding_unit_min, p2.rounding_unit_min) ) * IFNULL(p1.rounding_unit_min, p2.rounding_unit_min)
+			ELSE greatest( 0, timestampdiff( minute, timestamp(concat(d.work_date,' ', IFNULL(p1.plan_in, p2.plan_in))), d.check_in ) - IFNULL(p1.late_grace_min, p2.late_grace_min) )
+        end,
+		-- 4) 조퇴(분)
+		d.early_leave_minutes =
+		CASE
+			WHEN IFNULL(p1.rounding_unit_min, p2.rounding_unit_min) > 0 THEN round( ( greatest( 0, timestampdiff( minute,
+				CASE
+					WHEN #{timestamp} < d.check_in THEN date_add(#{timestamp}, INTERVAL 1 day)
+        ELSE #{timestamp}
+        end,
+        CASE
+        WHEN IFNULL(p1.plan_out, p2.plan_out) < IFNULL(p1.plan_in, p2.plan_in) THEN timestamp(date_add(d.work_date, INTERVAL 1 day), IFNULL(p1.plan_out, p2.plan_out))
+        ELSE timestamp(concat(d.work_date,' ', IFNULL(p1.plan_out, p2.plan_out)))
+        end ) - IFNULL(p1.early_grace_min, p2.early_grace_min) ) ) / IFNULL(p1.rounding_unit_min, p2.rounding_unit_min) ) * IFNULL(p1.rounding_unit_min, p2.rounding_unit_min)
+        ELSE greatest( 0, timestampdiff( minute,
+        CASE
+        WHEN #{timestamp} < d.check_in THEN date_add(#{timestamp}, INTERVAL 1 day)
+        ELSE #{timestamp}
+        end,
+        CASE
+        WHEN IFNULL(p1.plan_out, p2.plan_out) < IFNULL(p1.plan_in, p2.plan_in) THEN timestamp(date_add(d.work_date, INTERVAL 1 day), IFNULL(p1.plan_out, p2.plan_out))
+        ELSE timestamp(concat(d.work_date,' ', IFNULL(p1.plan_out, p2.plan_out)))
+        end ) - IFNULL(p1.early_grace_min, p2.early_grace_min) )
+        end,
+		-- 5) 연장(분) = (실근무 - 표준근로) > 임계치 && 사용여부=ON
+		d.overtime_minutes =
+		CASE
+			WHEN IFNULL(p1.overtime_enabled, p2.overtime_enabled) = 1 THEN
+				CASE
+					WHEN (
+						greatest( 0, timestampdiff( minute, d.check_in,
+						CASE
+							WHEN #{timestamp} < d.check_in THEN date_add(#{timestamp}, INTERVAL 1 day)
+        ELSE #{timestamp}
+        end ) - (
+        CASE
+        WHEN IFNULL(p1.auto_break_enabled, p2.auto_break_enabled) = 1 THEN coalesce(d.break_minutes,0)
+        ELSE 0
+        end) ) - IFNULL(p1.work_standard_minutes, p2.work_standard_minutes) ) > IFNULL(p1.overtime_threshold_min, p2.overtime_threshold_min) THEN
+        CASE
+        WHEN IFNULL(p1.rounding_unit_min, p2.rounding_unit_min) > 0 THEN round( ( greatest( 0, timestampdiff( minute, d.check_in,
+        CASE
+        WHEN #{timestamp} < d.check_in THEN date_add(#{timestamp}, INTERVAL 1 day)
+        ELSE #{timestamp}
+        end ) - (
+        CASE
+        WHEN IFNULL(p1.auto_break_enabled, p2.auto_break_enabled) = 1 THEN coalesce(d.break_minutes,0)
+        ELSE 0
+        end) ) - IFNULL(p1.work_standard_minutes, p2.work_standard_minutes) ) / IFNULL(p1.rounding_unit_min, p2.rounding_unit_min) ) * IFNULL(p1.rounding_unit_min, p2.rounding_unit_min)
+        ELSE ( greatest( 0, timestampdiff( minute, d.check_in,
+        CASE
+        WHEN #{timestamp} < d.check_in THEN date_add(#{timestamp}, INTERVAL 1 day)
+        ELSE #{timestamp}
+        end ) - (
+        CASE
+        WHEN IFNULL(p1.auto_break_enabled, p2.auto_break_enabled) = 1 THEN coalesce(d.break_minutes,0)
+        ELSE 0
+        end) ) - IFNULL(p1.work_standard_minutes, p2.work_standard_minutes) )
+        end
+        ELSE 0
+        end
+        ELSE 0
+        end,
+		-- 6) 이상코드
+		d.anomaly_code =
+		CASE
+			WHEN d.check_in IS NULL
+			AND #{timestamp} IS NULL THEN 'ABSENT'
+        WHEN (
+        greatest(0, timestampdiff(minute, timestamp(concat(d.work_date,' ', IFNULL(p1.plan_in, p2.plan_in))), d.check_in) - IFNULL(p1.late_grace_min, p2.late_grace_min)) > 0)
+        AND    (
+        greatest(0, timestampdiff( minute,
+        CASE
+        WHEN #{timestamp} < d.check_in THEN date_add(#{timestamp}, INTERVAL 1 day)
+        ELSE #{timestamp}
+        end,
+        CASE
+        WHEN IFNULL(p1.plan_out, p2.plan_out) < IFNULL(p1.plan_in, p2.plan_in) THEN timestamp(date_add(d.work_date, INTERVAL 1 day), IFNULL(p1.plan_out, p2.plan_out))
+        ELSE timestamp(concat(d.work_date,' ', IFNULL(p1.plan_out, p2.plan_out)))
+        end ) - IFNULL(p1.early_grace_min, p2.early_grace_min)) > 0) THEN 'LATE_EARLY'
+        WHEN (
+        greatest(0, timestampdiff(minute, timestamp(concat(d.work_date,' ', IFNULL(p1.plan_in, p2.plan_in))), d.check_in) - IFNULL(p1.late_grace_min, p2.late_grace_min)) > 0) THEN 'LATE'
+        WHEN (
+        greatest(0, timestampdiff( minute,
+        CASE
+        WHEN #{timestamp} < d.check_in THEN date_add(#{timestamp}, INTERVAL 1 day)
+        ELSE #{timestamp}
+        end,
+        CASE
+        WHEN IFNULL(p1.plan_out, p2.plan_out) < IFNULL(p1.plan_in, p2.plan_in) THEN timestamp(date_add(d.work_date, INTERVAL 1 day), IFNULL(p1.plan_out, p2.plan_out))
+        ELSE timestamp(concat(d.work_date,' ', IFNULL(p1.plan_out, p2.plan_out)))
+        end ) - IFNULL(p1.early_grace_min, p2.early_grace_min)) > 0) THEN 'EARLY'
+        ELSE 'NORMAL'
+        end,
+		d.updated_at = now()
+		]]>
+		WHERE  d.company_idx = #{companyIdx}
+		AND    d.tid         = #{tid}
+        AND    d.oid         = #{oid}
+        AND    d.work_date   = #{workDate}
+    </update>
+
+    <select id="findAttendanceByOid" parameterType="map" resultType="com.of.attendLeave.modules.attn.dto.AttendanceDto">
+        SELECT work_date AS workDate
+             , status
+             , DATE_FORMAT(check_in, '%H:%i') checkIn, check_in_src AS checkInSrc
+             , DATE_FORMAT(check_out, '%H:%i') checkOut, check_out_src AS checkOutSrc
+        FROM attendance_day
+        WHERE company_idx = #{companyIdx}
+          AND oid = #{oid}
+          AND work_date = #{workDate}
+    </select>
+
+    <select id="getLeaveHistoryGrouped" parameterType="map" resultType="map">
+        SELECT es.company_idx, esl.oid, esl.app_date AS appDate, esl.wk_item_seq AS wkItemSeq
+             , esl.wk_item_name AS wkItemName, esl.con_seq AS conSeq
+             , MIN(esl.vac_date) AS startYmd
+             , MAX(esl.vac_date) AS endYmd
+             , SUM(esl.wk_day) AS wkDay
+             , SUM(esl.wk_hour) AS wkHour
+             , SUM(esl.wk_minute) AS wkMinute
+        FROM email_sangsin es
+                 JOIN email_sangsin_leave esl
+                      ON es.es_idx = esl.es_idx
+        WHERE es.oid = #{oid}
+          AND es.company_idx = #{companyIdx}
+          AND es.appr_doc_type = 'L'
+          AND es.es_status = '결재완료'
+          AND es.es_nochul_yn = 1
+          AND esl.vac_date BETWEEN #{startYmd} AND #{endYmd}
+        GROUP BY es.company_idx, esl.oid, esl.app_date
+        ORDER BY esl.app_date DESC
+    </select>
+
+    <select id="getMonthlySummary" parameterType="map" resultType="map">
+        SELECT SUM(CASE WHEN check_in IS NOT NULL THEN 1 ELSE 0 END)              AS monthWorkingDays,
+               DATE_FORMAT(SEC_TO_TIME(AVG(TIME_TO_SEC(TIME(check_in)))), '%H:%i')       AS avgCheckIn,
+               COALESCE(SUM(overtime_minutes), 0)                                        AS overtimeMinutes,
+               SUM(CASE WHEN late_minutes > 0 THEN 1 ELSE 0 END)                         AS lateCount,
+               SUM(CASE WHEN early_leave_minutes > 0 THEN 1 ELSE 0 END)                  AS earlyLeaveCount,
+               SUM(CASE WHEN check_in IS NULL AND check_out IS NULL THEN 1 ELSE 0 END)   AS absentCount
+        FROM attendance_day
+        WHERE company_idx = #{companyIdx}
+          AND oid = #{oid}
+          AND work_date BETWEEN #{startYmdD} AND #{endYmdD}
+    </select>
+
+    <select id="getOrgSummary" parameterType="map" resultType="map">
+        SELECT
+            /* 전체 인원 (재직자) */
+            (SELECT COUNT(*)
+             FROM employee e
+             WHERE e.company_idx = #{companyIdx}
+               AND e.enable = 1) AS totalEmployees,
+            /* 출근 인원: 오늘 check_in 있음(퇴근 여부 무관, 정책에 맞게 조정 가능) */
+            (SELECT COUNT(DISTINCT ad.oid)
+             FROM attendance_day ad
+             WHERE ad.company_idx = #{companyIdx}
+               AND ad.work_date = #{workDate}
+               AND ad.check_in IS NOT NULL) AS onDuty,
+            /* 휴가 중: 일자 단위 기록(vacDate=YYYYMMDD)에서 오늘 휴가 승인된 인원 */
+            (SELECT COUNT(DISTINCT esl.oid)
+             FROM email_sangsin es
+                      JOIN email_sangsin_leave esl
+                           ON es.es_idx = esl.es_idx
+             WHERE es.company_idx= #{companyIdx}
+               AND es.es_status = '결재완료'
+               AND esl.vac_date = #{vacDate}) AS onLeave
+    </select>
+
+    <select id="getAttnByWorkDate" parameterType="map" resultType="com.of.attendLeave.modules.attn.dto.AttendanceDto">
+        SELECT <include refid="AttendanceColumns"></include>
+        FROM attendance_day ad
+        WHERE company_idx = #{companyIdx}
+        AND oid = #{oid}
+        AND work_date BETWEEN #{start} AND #{end}
+    </select>
+
+    <select id="getPolicyList" parameterType="map" resultType="com.of.attendLeave.modules.attn.dto.AttendancePolicyDto">
+        SELECT <include refid="AttendancePolicyColumns"></include>
+        , e.name, dm.dept_name deptName, dm.dept_code deptCode
+        FROM attendance_policy ap
+        JOIN employee e
+        ON ap.oid = e.oid
+        AND e.enable = 1
+        JOIN dept_mst dm
+        ON e.dept_code = dm.dept_code
+        AND dm.use_yn = 1
+        <where>
+            <if test="companyIdx != null"> AND ap.company_idx = #{companyIdx} </if>
+            <if test="tid != null and tid != ''"> AND ap.tid = #{tid} </if>
+            <if test="keyword != null and keyword != ''"> AND e.name LIKE CONCAT('%', #{keyword}, '%') </if>
+            <if test="activeYn != null and activeYn != ''"> AND ap.active_yn = #{activeYn} </if>
+            <if test="deptCode != null and deptCode != ''"> AND dm.dept_code = #{deptCode} </if>
+            AND ap.oid &lt;&gt; 'SYSTEM'
+            AND NOT (#{toDate} &lt; ap.from_date OR #{fromDate} &gt; ap.to_date)
+        </where>
+        ORDER BY created_at DESC, ap_idx DESC
+        LIMIT #{rows} OFFSET #{offset}
+    </select>
+
+    <select id="getPolicyCount" parameterType="map" resultType="Integer">
+        SELECT COUNT(*)
+        FROM attendance_policy ap
+        JOIN employee e
+        ON ap.oid = e.oid
+        AND e.enable = 1
+        JOIN dept_mst dm
+        ON e.dept_code = dm.dept_code
+        AND dm.use_yn = 1
+        <where>
+            <if test="companyIdx != null"> AND ap.company_idx = #{companyIdx} </if>
+            <if test="tid != null and tid != ''"> AND ap.tid = #{tid} </if>
+            <if test="keyword != null and keyword != ''"> AND e.name LIKE CONCAT('%', #{keyword}, '%') </if>
+            <if test="activeYn != null and activeYn != ''"> AND ap.active_yn = #{activeYn} </if>
+            <if test="deptCode != null and deptCode != ''"> AND dm.dept_code = #{deptCode} </if>
+            AND ap.oid &lt;&gt; 'SYSTEM'
+            AND NOT (#{toDate} &lt; ap.from_date OR #{fromDate} &gt; ap.to_date)
+        </where>
+    </select>
+
+    <select id="getPolicyListByMe" parameterType="map" resultType="com.of.attendLeave.modules.attn.dto.AttendancePolicyDto">
+        SELECT <include refid="AttendancePolicyColumns"></include>
+        , e.name
+        FROM attendance_policy ap
+        JOIN employee e
+        ON ap.oid = e.oid
+        <where>
+            <if test="companyIdx != null"> AND ap.company_idx = #{companyIdx} </if>
+            <if test="tid != null and tid != ''"> AND ap.tid = #{tid} </if>
+            <if test="activeYn != null and activeYn != ''"> AND ap.active_yn = #{activeYn} </if>
+            AND ap.oid = #{oid}
+            AND NOT (#{toDate} &lt; ap.from_date OR #{fromDate} &gt; ap.to_date)
+        </where>
+        ORDER BY created_at DESC, ap_idx DESC
+        LIMIT #{rows} OFFSET #{offset}
+    </select>
+
+    <select id="getPolicyByMeCount" parameterType="map" resultType="Integer">
+        SELECT COUNT(*)
+        FROM attendance_policy ap
+        JOIN employee e
+        ON ap.oid = e.oid
+        AND e.enable = 1
+        <where>
+            <if test="companyIdx != null"> AND ap.company_idx = #{companyIdx} </if>
+            <if test="tid != null and tid != ''"> AND ap.tid = #{tid} </if>
+            <if test="activeYn != null and activeYn != ''"> AND ap.active_yn = #{activeYn} </if>
+            AND ap.oid = #{oid}
+            AND NOT (#{toDate} &lt; ap.from_date OR #{fromDate} &gt; ap.to_date)
+        </where>
+    </select>
+
+    <select id="selectActiveOverlapForUpdate" resultType="com.of.attendLeave.modules.attn.dto.AttendancePolicyDto">
+        SELECT <include refid="AttendancePolicyColumns"></include>
+        FROM attendance_policy ap
+        WHERE company_idx = #{companyIdx}
+        <if test="tid != null and tid != ''">
+            AND tid = #{tid}
+        </if>
+        AND oid = #{oid}
+        AND active_yn = 1
+        AND NOT (#{to} &lt; from_date OR #{from} &gt; to_date)
+        FOR UPDATE
+    </select>
+
+    <insert id="insertPolicy" parameterType="com.of.attendLeave.modules.attn.dto.AttendancePolicyDto">
+        INSERT INTO attendance_policy (
+            oid, company_idx, tid, plan_in, plan_out, break_minutes, auto_break_enabled
+            , late_grace_min, early_grace_min, overtime_enabled, work_standard_minutes
+            , overtime_threshold_min, gps_check_enabled, gps_check_radius, office_latitude
+            , office_longitude, notification_enabled, teams_notification, annual_leave_auto_grant
+            , annual_leave_grant_mmdd, carry_over_max_days, rounding_unit_min, rounding_mode
+            , active_yn, from_date, to_date, reason, created_by, created_at
+        ) VALUES (
+            #{oid}, #{companyIdx}, #{tid}, #{planIn}, #{planOut}, #{breakMinutes}, #{autoBreakEnabled}
+            , #{lateGraceMin}, #{earlyGraceMin}, #{overtimeEnabled}, #{workStandardMinutes}
+            , #{overtimeThresholdMin}, #{gpsCheckEnabled}, #{gpsCheckRadius}, #{officeLatitude}
+            , #{officeLongitude}, #{notificationEnabled}, #{teamsNotification}, #{annualLeaveAutoGrant}
+            , #{annualLeaveGrantMmdd}, #{carryOverMaxDays}, #{roundingUnitMin}, #{roundingMode}
+            , #{activeYn}, #{fromDate}, #{toDate}, #{reason}, #{createdBy}, NOW()
+        )
+    </insert>
+
+    <update id="updatePolicyPeriodAndMeta">
+        UPDATE attendance_policy
+        SET from_date  = #{from},
+            to_date    = #{to},
+            reason     = #{reason},
+            updated_by = #{updatedBy},
+            updated_at = NOW()
+        WHERE ap_idx = #{apIdx}
+    </update>
+
+    <update id="updatePolicyAsNew">
+        UPDATE attendance_policy
+        SET plan_in = #{dto.planIn},
+            plan_out = #{dto.planOut},
+            break_minutes = #{dto.breakMinutes},
+            auto_break_enabled = #{dto.autoBreakEnabled, jdbcType=TINYINT},
+            late_grace_min = #{dto.lateGraceMin},
+            early_grace_min = #{dto.earlyGraceMin},
+            overtime_enabled = #{dto.overtimeEnabled, jdbcType=TINYINT},
+            work_standard_minutes = #{dto.workStandardMinutes},
+            overtime_threshold_min = #{dto.overtimeThresholdMin},
+            gps_check_enabled = #{dto.gpsCheckEnabled, jdbcType=TINYINT},
+            gps_check_radius = #{dto.gpsCheckRadius},
+            office_latitude = #{dto.officeLatitude},
+            office_longitude = #{dto.officeLongitude},
+            notification_enabled = #{dto.notificationEnabled, jdbcType=TINYINT},
+            teams_notification = #{dto.teamsNotification, jdbcType=TINYINT},
+            annual_leave_auto_grant = #{dto.annualLeaveAutoGrant, jdbcType=TINYINT},
+            annual_leave_grant_mmdd = #{dto.annualLeaveGrantMmdd},
+            carry_over_max_days = #{dto.carryOverMaxDays},
+            rounding_unit_min = #{dto.roundingUnitMin},
+            rounding_mode = #{dto.roundingMode},
+            from_date = #{dto.fromDate},
+            to_date   = #{dto.toDate},
+            priority   = #{dto.priority},
+            reason     = #{dto.reason},
+            updated_by = #{updatedBy},
+            updated_at = NOW()
+        WHERE ap_idx = #{apIdx}
+    </update>
+
+    <select id="getPolicyByOid" parameterType="map" resultType="com.of.attendLeave.modules.attn.dto.AttendancePolicyDto">
+        SELECT <include refid="AttendancePolicyColumns"></include>
+        , e.name, dm.dept_name deptName, dm.dept_code deptCode
+        FROM attendance_policy ap
+        LEFT JOIN employee e
+        ON ap.oid = e.oid
+        LEFT JOIN dept_mst dm
+        ON e.dept_code = dm.dept_code
+        WHERE ap.oid = #{oid}
+        <if test="apIdx != null and apIdx != ''">
+            AND ap.ap_idx = #{apIdx}
+        </if>
+    </select>
+
+    <update id="updatePolicyByOid" parameterType="map">
+        UPDATE attendance_policy SET
+        plan_in = #{planIn},
+        plan_out = #{planOut},
+        break_minutes = #{breakMinutes},
+        auto_break_enabled = #{autoBreakEnabled},
+        late_grace_min = #{lateGraceMin},
+        early_grace_min = #{earlyGraceMin},
+        overtime_enabled = #{overtimeEnabled},
+        work_standard_minutes = #{workStandardMinutes},
+        overtime_threshold_min = #{overtimeThresholdMin},
+        gps_check_enabled = #{gpsCheckEnabled},
+        gps_check_radius = #{gpsCheckRadius},
+        office_latitude = #{officeLatitude},
+        office_longitude = #{officeLongitude},
+        notification_enabled = #{notificationEnabled},
+        teams_notification = #{teamsNotification},
+        annual_leave_auto_grant = #{annualLeaveAutoGrant},
+        annual_leave_grant_mmdd = #{annualLeaveGrantMmdd},
+        carry_over_max_days = #{carryOverMaxDays},
+        rounding_unit_min = #{roundingUnitMin},
+        rounding_mode = #{roundingMode},
+        from_date = #{fromDate},
+        to_date = #{toDate},
+        updated_at = NOW()
+        WHERE company_idx = #{companyIdx}
+        AND oid = #{oid}
+    </update>
+
+    <update id="updatePolicyStatus" parameterType="map">
+        UPDATE attendance_policy SET
+          active_yn = #{activeYn},
+          updated_at = NOW()
+        WHERE company_idx = #{companyIdx}
+          AND oid = #{oid}
+          AND ap_idx = #{apIdx}
+    </update>
+
+    <select id="getAttnDayList" parameterType="map" resultType="com.of.attendLeave.modules.attn.dto.AttendanceDto">
+        SELECT <include refid="AttendanceColumns"></include>
+        FROM attendance_day ad
+        <where>
+            <if test="companyIdx != null"> AND ad.company_idx = #{companyIdx}</if>
+            <if test="tid != null and tid != ''"> AND ad.tid = #{tid} </if>
+            <if test="status != null and status != ''"> AND ad.status = #{status} </if>
+            <if test="anomalyCode != null and anomalyCode != ''"> AND ad.anomalyCode = #{anomalyCode} </if>
+            AND ad.oid = #{oid}
+            AND ad.work_date BETWEEN #{fromDate} AND #{toDate}
+        </where>
+        ORDER BY work_date DESC
+        LIMIT #{rows} OFFSET #{offset}
+    </select>
+
+    <select id="getAttnDayCount" parameterType="map" resultType="Integer">
+        SELECT COUNT(*)
+        FROM attendance_day ad
+        <where>
+            <if test="companyIdx != null"> AND ad.company_idx = #{companyIdx}</if>
+            <if test="tid != null and tid != ''"> AND ad.tid = #{tid} </if>
+            <if test="status != null and status != ''"> AND ad.status = #{status} </if>
+            <if test="anomalyCode != null and anomalyCode != ''"> AND ad.anomalyCode = #{anomalyCode} </if>
+            AND ad.oid = #{oid}
+            AND ad.work_date BETWEEN #{fromDate} AND #{toDate}
+        </where>
+    </select>
+
+    <select id="getMngAttnDayList" parameterType="map" resultType="com.of.attendLeave.modules.attn.dto.AttendanceDto">
+        SELECT <include refid="AttendanceColumns"></include>
+        , e.name, dm.dept_code deptCode, dm.dept_name deptName
+        FROM attendance_day ad
+        JOIN employee e
+        ON ad.oid = e.oid
+        AND e.enable = 1
+        JOIN dept_mst dm
+        ON e.dept_code = dm.dept_code
+        AND dm.use_yn = 1
+        <where>
+            <if test="companyIdx != null"> AND ad.company_idx = #{companyIdx}</if>
+            <if test="status != null and status != ''"> AND ad.status = #{status} </if>
+            <if test="anomalyCode != null and anomalyCode != ''"> AND ad.anomalyCode = #{anomalyCode} </if>
+            <if test="keyword != null and keyword != ''"> AND e.name LIKE CONCAT('%', #{keyword}, '%') </if>
+            <if test="deptCode != null and deptCode != ''"> AND dm.dept_code = #{deptCode} </if>
+            AND ad.work_date BETWEEN #{fromDate} AND #{toDate}
+        </where>
+        ORDER BY work_date DESC
+        LIMIT #{rows} OFFSET #{offset}
+    </select>
+
+    <select id="getMngAttnDayCount" parameterType="map" resultType="Integer">
+        SELECT COUNT(*)
+        FROM attendance_day ad
+        JOIN employee e
+        ON ad.oid = e.oid
+        AND e.enable = 1
+        JOIN dept_mst dm
+        ON e.dept_code = dm.dept_code
+        AND dm.use_yn = 1
+        <where>
+            <if test="companyIdx != null"> AND ad.company_idx = #{companyIdx}</if>
+            <if test="status != null and status != ''"> AND ad.status = #{status} </if>
+            <if test="anomalyCode != null and anomalyCode != ''"> AND ad.anomalyCode = #{anomalyCode} </if>
+            <if test="keyword != null and keyword != ''"> AND e.name LIKE CONCAT('%', #{keyword}, '%') </if>
+            <if test="deptCode != null and deptCode != ''"> AND dm.dept_code = #{deptCode} </if>
+            AND ad.work_date BETWEEN #{fromDate} AND #{toDate}
+        </where>
+    </select>
+</mapper>

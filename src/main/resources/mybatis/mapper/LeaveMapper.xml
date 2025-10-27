@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.of.attendLeave.modules.leave.LeaveMapper">
+    <sql id="LeaveTypeColumns">
+        lt.company_idx,
+		lt.tid,
+		lt.name,
+		lt.code,
+		lt.source,
+		lt.external_id AS externalId,
+		lt.unit_type AS unitType,
+		lt.allow_partial AS allowPartial,
+		lt.carry_over_yn AS carryOverYn,
+		lt.paid_yn AS paidYn,
+		lt.use_timing AS useTiming,
+		lt.default_entitlement AS defaultEntitlement,
+		lt.max_carry_over_days AS maxCarryOverDays,
+		lt.expire_months AS expireMonths,
+		lt.active_yn AS activeYn,
+		lt.sort_order AS sortOrder,
+		lt.oid,
+		lt.half_type_name AS halfTypeName,
+		lt.abs_sort_code AS absSortCode,
+		lt.dtc_type_code AS dtcTypeCode,
+		lt.is_cc AS isCC,
+		lt.updated_at AS updatedAt
+    </sql>
+
+    <select id="getLeavesByScope" parameterType="map" resultType="com.of.attendLeave.modules.leave.dto.LeaveDto">
+        SELECT es.es_idx AS esIdx, es.es_status AS esStatus, esl.el_seq elSeq, esl.oid, esl.name, esl.emp_seq AS empSeq
+        , esl.app_date AS appDate, esl.wk_item_seq AS wkItemSeq, esl.wk_item_name AS wkItemName
+        , esl.con_seq AS conSeq, esl.vac_date AS vacDate, esl.bec_time AS becTime, esl.dt_cnt AS dtCnt
+        , esl.vac_reason AS valReason, esl.wk_emp_name AS wkEmpName, esl.tel_no AS telNo
+        , esl.wk_day AS wkDay, esl.wk_hour AS wkHour, esl.wk_minute AS wkMinute
+        , dm.dept_code AS deptCode, dm.dept_name AS deptName
+        FROM email_sangsin es
+        JOIN email_sangsin_leave esl
+        ON es.es_idx = esl.es_idx
+        JOIN employee e
+        ON es.oid = e.oid
+        JOIN dept_mst dm
+        ON e.dept_code = dm.dept_code
+        WHERE appr_doc_type = 'L'
+        AND es.company_idx = #{companyIdx}
+        AND es.es_nochul_yn = '1'
+        AND es.appr_doc_type = 'L'
+        AND esl.vac_date BETWEEN #{start} AND #{end}
+        <choose>
+            <when test="scope == 'me'">
+                AND es.oid = #{oid}
+            </when>
+            <when test="scope == 'team'">
+                AND dm.dept_code = #{deptCode}
+            </when>
+            <when test="scope == 'all'">
+                AND TRUE
+            </when>
+        </choose>
+        <if test="statuses != null and statuses.size > 0">
+            AND es.es_status IN
+            <foreach collection="statuses" item="st" open="(" separator="," close=")">
+                #{st}
+            </foreach>
+        </if>
+        <if test="wkItem != ''">
+            AND esl.wk_item_seq = #{wkItem}
+        </if>
+    </select>
+
+    <insert id="upsertRawBatch" parameterType="java.util.List">
+        INSERT INTO erp_leave_type
+        (company_idx, tid, wk_item_seq, wk_item_name,
+        is_half, sm_half_type_name, sm_dtc_type, sm_abs_wk_sort,
+        is_cc, dtc_type_code, fetched_at)
+        VALUES
+        <foreach collection="list" item="r" separator=",">
+            (#{r.companyIdx}, #{r.tid}, #{r.wkItemSeq}, #{r.wkItemName},
+            #{r.isHalf}, #{r.smHalfTypeName}, #{r.smDtcType}, #{r.smAbsWkSort},
+            #{r.isCC}, #{r.dtcTypeCode}, NOW())
+        </foreach>
+        ON DUPLICATE KEY UPDATE
+        wk_item_name      = VALUES(wk_item_name),
+        is_half           = VALUES(is_half),
+        sm_half_type_name = VALUES(sm_half_type_name),
+        sm_dtc_type       = VALUES(sm_dtc_type),
+        sm_abs_wk_sort    = VALUES(sm_abs_wk_sort),
+        is_cc             = VALUES(is_cc),
+        dtc_type_code     = VALUES(dtc_type_code),
+        fetched_at        = NOW()
+    </insert>
+
+    <insert id="upsertLeaveType" parameterType="map">
+        INSERT INTO leave_type (
+            company_idx, tid, name, code, source,
+            external_id, unit_type, allow_partial, default_entitlement,
+            paid_yn, half_type_name, abs_sort_code,
+            dtc_type_code, is_cc, active_yn, sort_order, oid
+        )
+        SELECT e.company_idx, e.tid, e.wk_item_name AS name,
+               CONCAT('ERP_', e.wk_item_seq) AS code,
+               'ERP' AS source,
+               CAST(e.wk_item_seq AS CHAR) AS external_id,
+               CASE WHEN e.dtc_type_code = '3' THEN 'HOUR'
+                    ELSE 'DAY'
+                   END AS unit_type,
+               CASE WHEN e.dtc_type_code = '3' THEN 1
+                    WHEN e.is_half = 1 THEN 1
+                    ELSE 0
+                   END AS allow_partial,
+               0 AS default_entitlement,
+               1 AS paid_yn,
+               NULLIF(e.sm_half_type_name, '') AS half_type_name,
+               e.sm_abs_wk_sort AS abs_sort_code,
+               e.dtc_type_code,
+               e.is_cc,
+               1 AS active_yn,
+               e.sm_abs_wk_sort AS sort_order,
+               #{oid} AS oid
+        FROM erp_leave_type e
+        WHERE e.company_idx = #{company_idx}
+          AND e.tid = #{tid}
+            ON DUPLICATE KEY UPDATE
+             name           = VALUES(name),
+             source         = 'ERP',
+             code           = VALUES(code),
+             unit_type      = VALUES(unit_type),
+             allow_partial  = VALUES(allow_partial),
+             paid_yn        = VALUES(paid_yn),
+             half_type_name = VALUES(half_type_name),
+             abs_sort_code  = VALUES(abs_sort_code),
+             dtc_type_code  = VALUES(dtc_type_code),
+             is_cc          = VALUES(is_cc),
+             active_yn      = 1,
+             updated_at     = CURRENT_TIMESTAMP;
+    </insert>
+
+    <update id="deactivateMissingFromRaw" parameterType="map">
+        UPDATE leave_type lt
+            LEFT JOIN erp_leave_type et
+        ON et.company_idx = lt.company_idx
+            AND et.wk_item_seq = lt.external_id
+            SET lt.active_yn = 0,
+                lt.updated_at = NOW()
+        WHERE lt.company_idx = #{companyIdx}
+          AND lt.source = 'ERP'
+          AND et.wk_item_seq IS NULL
+    </update>
+
+    <select id="getLeaveTypeList" parameterType="map" resultType="com.of.attendLeave.modules.leave.dto.LeaveTypeDto">
+        SELECT <include refid="LeaveTypeColumns"></include>
+        FROM leave_type lt
+        WHERE lt.company_idx = #{companyIdx}
+        <if test="keyword != null and keyword != ''">
+            AND (lt.name LIKE CONCAT('%', #{keyword}, '%') OR lt.code LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        <if test="unitType != null and unitType != ''">
+            AND lt.unit_type = #{unitType}
+        </if>
+        <if test="active != null and active != ''">
+            AND lt.active_yn = #{active}
+        </if>
+        <if test="source != null and source != ''">
+            AND lt.source = #{source}
+        </if>
+        AND lt.use_yn = 'Y'
+        ORDER BY source DESC, lt.sort_order DESC
+        LIMIT #{rows} OFFSET #{offset}
+    </select>
+
+    <select id="getLeaveTypeListCount" parameterType="map" resultType="Integer">
+        SELECT COUNT(*)
+        FROM leave_type lt
+        WHERE lt.company_idx = #{companyIdx}
+        <if test="keyword != null and keyword != ''">
+            AND (lt.name LIKE CONCAT('%', #{keyword}, '%') OR lt.code LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        <if test="unitType != null and unitType != ''">
+            AND lt.unit_type = #{unitType}
+        </if>
+        <if test="active != null and active != ''">
+            AND lt.active_yn = #{active}
+        </if>
+        <if test="source != null and source != ''">
+            AND lt.source = #{source}
+        </if>
+        AND lt.use_yn = 'Y'
+    </select>
+
+    <insert id="createLeaveType" parameterType="map" useGeneratedKeys="true" keyProperty="leaveTypeId">
+        INSERT INTO leave_type
+        (company_idx, tid, name, code, unit_type, allow_partial, carry_over_yn, paid_yn
+        , use_timing, active_yn, sort_order, oid, source, created_at, updated_at)
+        VALUES
+            (#{companyIdx}, #{tid}, #{name}, #{code}, #{unitType}, #{allowPartial}, #{carryOverYn}, #{paidYn}
+            , #{useTiming}, #{activeYn}, #{sortOrder}, #{oid}, 'GW', NOW(), NOW())
+    </insert>
+
+    <select id="getLeaveTypeByCode" parameterType="map" resultType="com.of.attendLeave.modules.leave.dto.LeaveTypeDto">
+        SELECT <include refid="LeaveTypeColumns"></include>
+        FROM leave_type lt
+        WHERE code = #{code}
+        AND company_idx = #{companyIdx}
+        AND tid = #{tid}
+        AND use_yn = 'Y'
+    </select>
+
+    <select id="getLeaveType" resultType="com.of.attendLeave.modules.leave.dto.LeaveTypeDto">
+        SELECT <include refid="LeaveTypeColumns"></include>
+        FROM leave_type lt
+        WHERE source = 'ERP'
+        AND company_idx = #{companyIdx}
+        AND tid = #{tid}
+        AND use_yn = 'Y'
+    </select>
+
+    <update id="updateLeaveType" parameterType="map">
+        UPDATE leave_type SET
+          name = #{name},
+          unit_type = #{unitType},
+          allow_partial = #{allowPartial},
+          carry_over_yn = #{carryOverYn},
+          paid_yn = #{paidYn},
+          use_timing = #{useTiming},
+          active_yn = #{activeYn},
+          updated_at = NOW()
+        WHERE company_idx = #{companyIdx}
+          AND code = #{code}
+          AND source = 'GW'
+    </update>
+
+    <update id="updateStatus" parameterType="map">
+        UPDATE leave_type SET
+          active_yn = #{activeYn},
+          updated_at = NOW()
+        WHERE company_idx = #{companyIdx}
+          AND code = #{code}
+    </update>
+
+    <update id="deleteLeaveType" parameterType="map">
+        UPDATE leave_type SET
+          use_yn = 'N',
+          updated_at = NOW()
+        WHERE company_idx = #{companyIdx}
+          AND code IN
+          <foreach collection="codeList" item="code" open="(" separator="," close=")">
+            #{code}
+          </foreach>
+    </update>
+</mapper>

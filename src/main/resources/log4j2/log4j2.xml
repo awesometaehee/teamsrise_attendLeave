@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="INFO">
+    <Properties>
+        <Property name="LOG_PATH">logs</Property>
+        <Property name="DEFAULT_PATTERN">[%d{yyyy-MM-dd HH:mm:ss.SSS}] %5p %pid --- [%15.15t] %-40.40c{1.} : %m%n%throwable</Property>
+        <!-- 색상: Log4j2는 %highlight / %style 사용 -->
+        <Property name="COLOR_PATTERN">%style{[%d{yyyy-MM-dd HH:mm:ss.SSS}]}{dim} %highlight{%-5level}{FATAL=bg_red, ERROR=red, WARN=yellow, INFO=green, DEBUG=blue, TRACE=black} %style{%pid}{magenta} %style{---}{dim} %style{[%15.15t]}{dim} %style{%-40.40c{1.}}{cyan} %style{:}{dim} %m%n%throwable</Property>
+    </Properties>
+
+    <Appenders>
+        <Console name="ConsoleAppender" target="SYSTEM_OUT" follow="true">
+            <PatternLayout pattern="${COLOR_PATTERN}" disableAnsi="false"/>
+        </Console>
+
+        <RollingFile name="RollingFileAppender" fileName="${LOG_PATH}/app.log"
+                     filePattern="${LOG_PATH}/app.%d{yyyy-MM-dd-HH}.%i.log.gz">
+            <PatternLayout pattern="${DEFAULT_PATTERN}"/>
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                <SizeBasedTriggeringPolicy size="100MB"/>
+            </Policies>
+            <DefaultRolloverStrategy>
+                <Delete basePath="${LOG_PATH}" maxDepth="1">
+                    <IfAccumulatedFileCount exceeds="3"/>
+                </Delete>
+            </DefaultRolloverStrategy>
+        </RollingFile>
+    </Appenders>
+
+    <Loggers>
+        <Root level="INFO" additivity="false">
+            <AppenderRef ref="ConsoleAppender"/>
+            <AppenderRef ref="RollingFileAppender"/>
+        </Root>
+
+        <Logger name="org.springframework" level="INFO" additivity="false">
+            <AppenderRef ref="ConsoleAppender"/>
+            <AppenderRef ref="RollingFileAppender"/>
+        </Logger>
+
+        <!-- log4jdbc -->
+        <Logger name="jdbc.sqlonly" level="off" additivity="false">
+            <AppenderRef ref="SqlConsole"/>
+        </Logger>
+        <Logger name="jdbc.sqltiming" level="debug" additivity="false">
+            <AppenderRef ref="ConsoleAppender"/>
+        </Logger>
+        <Logger name="jdbc.resultsettable" level="debug" additivity="false">
+            <AppenderRef ref="ConsoleAppender"/>
+            <AppenderRef ref="RollingFileAppender"/>
+        </Logger>
+
+        <!-- 중복 노이즈 방지 -->
+        <Logger name="jdbc.audit" level="OFF" additivity="false"/>
+        <Logger name="jdbc.resultset" level="OFF" additivity="false"/>
+        <Logger name="jdbc.connection" level="OFF" additivity="false"/>
+    </Loggers>
+</Configuration>
