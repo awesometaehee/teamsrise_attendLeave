@@ -12,9 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Service
 @RequiredArgsConstructor
@@ -234,6 +232,52 @@ public class AttnServiceImpl implements AttnService {
         int isSaved = mapper.insertPolicy(params);
 
         return Map.of("isSaved", isSaved > 0);
+    }
+
+    @Override
+    public Map<String, Object> getBreakStart(RequestUser user, Map<String, Object> params) {
+        LocalDate from = LocalDate.parse((String) params.get("from"));
+        LocalDate to = LocalDate.parse((String) params.get("to"));
+
+        Map<String, Object> map = new HashMap<>();
+        map.put("tid", user.tid());
+        map.put("oid", user.oid());
+        map.put("companyIdx", user.companyIdx());
+        map.put("from", from);
+        map.put("to", to);
+
+        // 정책 조회 (개인 + SYSTEM)
+        List<AttendancePolicyDto> list = mapper.getBreakStart(map);
+
+        // 최신 SYSTEM 1건
+        AttendancePolicyDto system = list.stream()
+                .filter(p -> "SYSTEM".equals(p.getOid()))
+                .max(Comparator.comparing(AttendancePolicyDto::getApIdx))
+                .orElse(null);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+
+        // 날짜별 매핑: 개인(유효) 우선 -> 없으면 SYSTEM
+        for (LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) {
+            final LocalDate day = d;
+
+            AttendancePolicyDto chosen = list.stream()
+                    .filter(p -> user.oid().equals(p.getOid()))
+                    .filter(p -> Objects.equals(1, p.getActiveYn()))
+                    .filter(p -> !day.isBefore(p.getFromDate()))
+                    .filter(p -> day.isBefore(Objects.requireNonNullElse(p.getToDate(), LocalDate.of(9999,12,31)).plusDays(1)))
+                    .max(Comparator.comparing(AttendancePolicyDto::getApIdx))
+                    .orElse(system);
+
+            if(chosen != null && chosen.getBreakStart() != null) {
+                result.put(day.toString(), Map.of("start", chosen.getBreakStart().toString().substring(0,5)
+                        , "breakMinutes", chosen.getBreakMinutes()
+                        , "planIn", chosen.getPlanIn().toString().substring(0,5)
+                        , "planOut", chosen.getPlanOut().toString().substring(0,5)));
+            }
+        }
+
+        return result;
     }
 
     private String append(String base, String reason) {

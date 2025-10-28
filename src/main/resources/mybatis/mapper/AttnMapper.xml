@@ -32,6 +32,7 @@
         DATE_FORMAT(ap.plan_in, '%H:%i')   AS planIn,
         DATE_FORMAT(ap.plan_out, '%H:%i')  AS planOut,
         ap.break_minutes          AS breakMinutes,
+        ap.break_start            AS breakStart,
         ap.auto_break_enabled     AS autoBreakEnabled,
         ap.late_grace_min         AS lateGraceMin,
         ap.early_grace_min        AS earlyGraceMin,
@@ -688,5 +689,20 @@
             <if test="deptCode != null and deptCode != ''"> AND dm.dept_code = #{deptCode} </if>
             AND ad.work_date BETWEEN #{fromDate} AND #{toDate}
         </where>
+    </select>
+
+    <select id="getBreakStart" parameterType="map" resultType="com.of.attendLeave.modules.attn.dto.AttendancePolicyDto">
+        SELECT <include refid="AttendancePolicyColumns"></include>
+        FROM attendance_policy ap
+        WHERE ap.company_idx = #{companyIdx}
+        AND ap.tid = #{tid}
+        AND (
+            (ap.oid = #{oid} AND ap.active_yn = 1
+            AND ap.from_date &lt;= #{to}
+            AND COALESCE(ap.to_date, '9999-12-31') &gt;= #{from})
+            OR
+            ap.oid = 'SYSTEM'
+        )
+        ORDER BY ap.ap_idx DESC
     </select>
 </mapper>

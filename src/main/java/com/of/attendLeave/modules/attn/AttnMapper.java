@@ -81,4 +81,6 @@ public interface AttnMapper {
             , @Param("reason") String reason, @Param("updatedBy") String updatedBy);
 
     int updatePolicyAsNew(@Param("apIdx") Integer apIdx, AttendancePolicyDto dto, @Param("updatedBy") String updatedBy);
+
+    List<AttendancePolicyDto> getBreakStart(Map<String, Object> map);
 }

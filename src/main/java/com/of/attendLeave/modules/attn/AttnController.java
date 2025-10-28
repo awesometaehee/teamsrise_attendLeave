@@ -104,7 +104,7 @@ public class AttnController {
      * @return
      */
     @PostMapping("/attn/getPolicyListByMe")
-    @PreAuthorize("hasRole('SUPER')")
+    @PreAuthorize("hasRole('NONE')")
     public ResponseApiUtil<?> getPolicyListByMe(@AuthenticationPrincipal RequestUser user, @RequestBody Map<String, Object> params) {
         Map<String, Object> attn = attnService.getPolicyListByMe(user, params);
         return ResponseApiUtil.success(attn.get("list"), (PageInfo) attn.get("pageInfo"));
@@ -124,7 +124,7 @@ public class AttnController {
      * @return
      */
     @PostMapping("/attn/getPolicyByOid")
-    @PreAuthorize("hasRole('SUPER')")
+    @PreAuthorize("hasRole('NONE')")
     public ResponseApiUtil<?> getPolicyByOid(@AuthenticationPrincipal RequestUser user, @RequestBody Map<String, Object> params) {
         AttendancePolicyDto attn = attnService.getPolicyByOid(user, params);
         return ResponseApiUtil.success(attn);
@@ -137,7 +137,7 @@ public class AttnController {
      * @return
      */
     @PostMapping("/attn/updatePolicyByOid")
-    @PreAuthorize("hasRole('SUPER')")
+    @PreAuthorize("hasRole('NONE')")
     public ResponseApiUtil<?> updatePolicyByOid(@AuthenticationPrincipal RequestUser user, @RequestBody AttendancePolicyDto params) {
         Map<String, Object> attn = attnService.updatePolicyByOid(user, params);
         return ResponseApiUtil.success(attn);
@@ -150,7 +150,7 @@ public class AttnController {
      * @return
      */
     @PostMapping("attn/updatePolicyStatus")
-    @PreAuthorize("hasRole('SUPER')")
+    @PreAuthorize("hasRole('NONE')")
     public ResponseApiUtil<?> updatePolicyStatus(@AuthenticationPrincipal RequestUser user, @RequestBody Map<String, Object> params) {
         Map<String, Object> attn = attnService.updatePolicyStatus(user, params);
         return ResponseApiUtil.success(attn);
@@ -180,5 +180,18 @@ public class AttnController {
     public ResponseApiUtil<?> getMngAttnDayList(@AuthenticationPrincipal RequestUser user, @RequestBody Map<String, Object> params) {
         Map<String, Object> attn = attnService.getMngAttnDayList(user, params);
         return ResponseApiUtil.success(attn.get("list"), (PageInfo) attn.get("pageInfo"));
+    }
+
+    /**
+     * 근태 사원별 휴게 시작 시간 조회
+     * @param user
+     * @param params
+     * @return
+     */
+    @PostMapping("attn/getBreakStart")
+    @PreAuthorize("hasRole('NONE')")
+    public ResponseApiUtil<?> getBreakStart(@AuthenticationPrincipal RequestUser user, @RequestBody Map<String, Object> params) {
+        Map<String, Object> attn = attnService.getBreakStart(user, params);
+        return ResponseApiUtil.success(attn);
     }
 }

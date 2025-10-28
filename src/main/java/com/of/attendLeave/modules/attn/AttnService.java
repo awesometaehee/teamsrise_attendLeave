@@ -39,4 +39,6 @@ public interface AttnService {
     Map<String, Object> getPolicyListByMe(RequestUser user, Map<String, Object> params);
 
     Map<String, Object> savePolicyByMe(RequestUser user, AttendancePolicyDto params);
+
+    Map<String, Object> getBreakStart(RequestUser user, Map<String, Object> params);
 }

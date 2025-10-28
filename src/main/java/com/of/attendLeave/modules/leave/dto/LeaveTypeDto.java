@@ -25,6 +25,7 @@ public class LeaveTypeDto {
     private Integer sortOrder;
     private String oid;
     private String halfTypeName;
+    private String isHalf;
     private Integer absSortCode;
     private String dtcTypeCode;
     private int isCC;

@@ -21,6 +21,7 @@
 		lt.sort_order AS sortOrder,
 		lt.oid,
 		lt.half_type_name AS halfTypeName,
+        lt.is_half AS isHalf,
 		lt.abs_sort_code AS absSortCode,
 		lt.dtc_type_code AS dtcTypeCode,
 		lt.is_cc AS isCC,
@@ -94,7 +95,7 @@
         INSERT INTO leave_type (
             company_idx, tid, name, code, source,
             external_id, unit_type, allow_partial, default_entitlement,
-            paid_yn, half_type_name, abs_sort_code,
+            paid_yn, half_type_name, is_half, abs_sort_code,
             dtc_type_code, is_cc, active_yn, sort_order, oid
         )
         SELECT e.company_idx, e.tid, e.wk_item_name AS name,
@@ -111,6 +112,7 @@
                0 AS default_entitlement,
                1 AS paid_yn,
                NULLIF(e.sm_half_type_name, '') AS half_type_name,
+               e.is_half,
                e.sm_abs_wk_sort AS abs_sort_code,
                e.dtc_type_code,
                e.is_cc,
@@ -118,7 +120,7 @@
                e.sm_abs_wk_sort AS sort_order,
                #{oid} AS oid
         FROM erp_leave_type e
-        WHERE e.company_idx = #{company_idx}
+        WHERE e.company_idx = #{companyIdx}
           AND e.tid = #{tid}
             ON DUPLICATE KEY UPDATE
              name           = VALUES(name),
@@ -128,6 +130,7 @@
              allow_partial  = VALUES(allow_partial),
              paid_yn        = VALUES(paid_yn),
              half_type_name = VALUES(half_type_name),
+             is_half        = VALUES(is_half),
              abs_sort_code  = VALUES(abs_sort_code),
              dtc_type_code  = VALUES(dtc_type_code),
              is_cc          = VALUES(is_cc),

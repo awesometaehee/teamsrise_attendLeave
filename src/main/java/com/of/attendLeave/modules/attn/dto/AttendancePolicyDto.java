@@ -23,6 +23,7 @@ public class AttendancePolicyDto {
     private LocalTime planIn;               // 계획 출근 시간
     private LocalTime planOut;              // 계획 퇴근 시간
     private Integer breakMinutes;           // 휴게 시간(분)
+    private LocalTime breakStart;           // 휴게 시작 시간
     private Boolean autoBreakEnabled;       // 휴게 자동 차감 여부
 
     private Integer lateGraceMin;           // 지각 유예 시간(분)
