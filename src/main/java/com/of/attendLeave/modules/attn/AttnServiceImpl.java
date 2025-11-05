@@ -86,8 +86,8 @@ public class AttnServiceImpl implements AttnService {
         String end = DateUtil.toDateOnly((String) params.getOrDefault("end", ""));
 
         Map<String, Object> map = new HashMap<>();
-        map.put("oid", user.oid());
-        map.put("companyIdx", user.companyIdx());
+        map.put("oid", user.getOid());
+        map.put("companyIdx", user.getCompanyIdx());
         map.put("start", start);
         map.put("end", end);
 
@@ -97,8 +97,8 @@ public class AttnServiceImpl implements AttnService {
     @Override
     public Map<String, Object> summaryMonth(RequestUser user, Map<String, Object> params) {
         Map<String, Object> map = new HashMap<>();
-        map.put("oid", user.oid());
-        map.put("companyIdx", user.companyIdx());
+        map.put("oid", user.getOid());
+        map.put("companyIdx", user.getCompanyIdx());
         map.put("startYmdD", params.get("startYmdD"));
         map.put("endYmdD", params.get("endYmdD"));
 
@@ -112,8 +112,8 @@ public class AttnServiceImpl implements AttnService {
 
         Map<String, Object> map = new HashMap<>();
         map.put("deptCode", params.get("deptCode"));
-        map.put("companyIdx", user.companyIdx());
-        map.put("tid", user.tid());
+        map.put("companyIdx", user.getCompanyIdx());
+        map.put("tid", user.getTid());
         map.put("keyword", params.get("keyword"));
         map.put("activeYn", params.get("activeYn"));
         map.put("fromDate", params.get("fromDate"));
@@ -138,9 +138,9 @@ public class AttnServiceImpl implements AttnService {
         int rows = (Integer) params.getOrDefault("rows", 15);
 
         Map<String, Object> map = new HashMap<>();
-        map.put("companyIdx", user.companyIdx());
-        map.put("tid", user.tid());
-        map.put("oid", user.oid());
+        map.put("companyIdx", user.getCompanyIdx());
+        map.put("tid", user.getTid());
+        map.put("oid", user.getOid());
         map.put("activeYn", params.get("activeYn"));
         map.put("fromDate", params.get("fromDate"));
         map.put("toDate", params.get("toDate"));
@@ -170,7 +170,7 @@ public class AttnServiceImpl implements AttnService {
 
         // 2) 겹치는 활성 정책 잠금 조회 (FOR UPDATE)
         List<AttendancePolicyDto> overlaps =
-                mapper.selectActiveOverlapForUpdate(user.companyIdx(), user.tid(), user.oid(), ns, ne);
+                mapper.selectActiveOverlapForUpdate(user.getCompanyIdx(), user.getTid(), user.getOid(), ns, ne);
 
         // 3) 기존 정책 분할 (SPLIT)
         for(AttendancePolicyDto old : overlaps) {
@@ -187,15 +187,15 @@ public class AttnServiceImpl implements AttnService {
                         os,
                         ns.minusDays(1),
                         append(old.getReason(), "자동 분할(앞)"),
-                        user.oid());
+                        user.getOid());
 
                 var right = old.toBuilder()
                         .fromDate(ne.plusDays(1))
                         .toDate(oe)
                         .reason(append(old.getReason(), "자동 분할(뒤)"))
                         .activeYn(1)
-                        .createdBy(user.oid())
-                        .updatedBy(user.oid())
+                        .createdBy(user.getOid())
+                        .updatedBy(user.getOid())
                         .build();
 
                 mapper.insertPolicy(right);
@@ -206,7 +206,7 @@ public class AttnServiceImpl implements AttnService {
                         os,
                         ns.minusDays(1),
                         append(old.getReason(), "자동 분할(앞)"),
-                        user.oid());
+                        user.getOid());
             } else if(needRight) {
                 // 3-2) 새 구간이 왼쪽으로 길게 겹쳐서 뒤 조각이 없을 때
                 mapper.updatePolicyPeriodAndMeta(
@@ -214,20 +214,20 @@ public class AttnServiceImpl implements AttnService {
                         ne.plusDays(1),
                         oe,
                         append(old.getReason(), "자동 분할(뒤)"),
-                        user.oid());
+                        user.getOid());
             } else {
-                int isUpdated = mapper.updatePolicyAsNew(old.getApIdx(), params, user.oid());
+                int isUpdated = mapper.updatePolicyAsNew(old.getApIdx(), params, user.getOid());
                 return Map.of("isUpdated", isUpdated > 0);
             }
         }
 
-        if(params.getCompanyIdx() == null) params.setCompanyIdx(user.companyIdx());
-        if(params.getTid() == null) params.setTid(user.tid());
-        if(params.getOid() == null) params.setOid(user.oid());
+        if(params.getCompanyIdx() == null) params.setCompanyIdx(user.getCompanyIdx());
+        if(params.getTid() == null) params.setTid(user.getTid());
+        if(params.getOid() == null) params.setOid(user.getOid());
         if(params.getActiveYn() == null) params.setActiveYn(1);
         if(params.getPriority() == 0) params.setPriority(100);
-        params.setCreatedBy(user.oid());
-        params.setUpdatedBy(user.oid());
+        params.setCreatedBy(user.getOid());
+        params.setUpdatedBy(user.getOid());
 
         int isSaved = mapper.insertPolicy(params);
 
@@ -240,9 +240,9 @@ public class AttnServiceImpl implements AttnService {
         LocalDate to = LocalDate.parse((String) params.get("to"));
 
         Map<String, Object> map = new HashMap<>();
-        map.put("tid", user.tid());
-        map.put("oid", user.oid());
-        map.put("companyIdx", user.companyIdx());
+        map.put("tid", user.getTid());
+        map.put("oid", user.getOid());
+        map.put("companyIdx", user.getCompanyIdx());
         map.put("from", from);
         map.put("to", to);
 
@@ -262,7 +262,7 @@ public class AttnServiceImpl implements AttnService {
             final LocalDate day = d;
 
             AttendancePolicyDto chosen = list.stream()
-                    .filter(p -> user.oid().equals(p.getOid()))
+                    .filter(p -> user.getOid().equals(p.getOid()))
                     .filter(p -> Objects.equals(1, p.getActiveYn()))
                     .filter(p -> !day.isBefore(p.getFromDate()))
                     .filter(p -> day.isBefore(Objects.requireNonNullElse(p.getToDate(), LocalDate.of(9999,12,31)).plusDays(1)))
@@ -303,7 +303,7 @@ public class AttnServiceImpl implements AttnService {
     public Map<String, Object> updatePolicyStatus(RequestUser user, Map<String, Object> params) {
         Map<String, Object> map = new HashMap<>();
         map.put("oid", params.get("oid"));
-        map.put("companyIdx", user.companyIdx());
+        map.put("companyIdx", user.getCompanyIdx());
         map.put("apIdx", params.get("apIdx"));
         map.put("activeYn", params.get("activeYn"));
 
@@ -317,9 +317,9 @@ public class AttnServiceImpl implements AttnService {
         int rows = (Integer) params.getOrDefault("rows", 15);
 
         Map<String, Object> map = new HashMap<>();
-        map.put("oid", user.oid());
-        map.put("companyIdx", user.companyIdx());
-        map.put("tid", user.tid());
+        map.put("oid", user.getOid());
+        map.put("companyIdx", user.getCompanyIdx());
+        map.put("tid", user.getTid());
         map.put("status", params.get("status"));
         map.put("anomalyCode", params.get("anomalyCode"));
         map.put("fromDate", params.get("fromDate"));
@@ -344,8 +344,8 @@ public class AttnServiceImpl implements AttnService {
         int rows = (Integer) params.getOrDefault("rows", 15);
 
         Map<String, Object> map = new HashMap<>();
-        map.put("companyIdx", user.companyIdx());
-        map.put("tid", user.tid());
+        map.put("companyIdx", user.getCompanyIdx());
+        map.put("tid", user.getTid());
         map.put("status", params.get("status"));
         map.put("anomalyCode", params.get("anomalyCode"));
         map.put("keyword", params.get("keyword"));

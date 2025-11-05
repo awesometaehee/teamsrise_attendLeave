@@ -16,7 +16,7 @@ public class AttnScheduler {
     private static final Logger logger = LoggerFactory.getLogger(AttnScheduler.class);
     private final AttnService service;
 
-    @Scheduled(cron = "0 30 09 * * *")
+    @Scheduled(cron = "0 0 03 * * *")
     public void createTodayRow() {
         List<Map<String, Object>> companies = service.findActiveCompanies();
 

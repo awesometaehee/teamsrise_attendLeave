@@ -44,10 +44,10 @@ public class LeaveServiceImpl implements LeaveService {
         }
 
         Map<String, Object> map = new HashMap<>();
-        map.put("oid", user.oid());
-        map.put("companyIdx", user.companyIdx());
-        map.put("tid", user.tid());
-        map.put("deptCode", user);
+        map.put("oid", user.getOid());
+        map.put("companyIdx", user.getCompanyIdx());
+        map.put("tid", user.getTid());
+        map.put("deptCode", user.getDeptCode());
         map.put("scope", scope);
         map.put("start", start);
         map.put("end", end);
@@ -85,8 +85,8 @@ public class LeaveServiceImpl implements LeaveService {
         // 3. DTO에 tid, companyIdx SET
         for(LeaveErpVacDto src : erpList) {
             try {
-                src.setTid(user.tid());
-                src.setCompanyIdx(user.companyIdx());
+                src.setTid(user.getTid());
+                src.setCompanyIdx(user.getCompanyIdx());
             } catch(Exception e) {
                 errors++;
                 log.warn("raw 전처리 실패: {} ({})", src.getWkItemName(), src.getWkItemSeq(), e);
@@ -98,9 +98,9 @@ public class LeaveServiceImpl implements LeaveService {
 
         // 5. ERP 휴가 항목에 추가된 데이터가 있다면 INSERT
         Map<String, Object> dMap = new HashMap<>();
-        dMap.put("oid", user.oid());
-        dMap.put("tid", user.tid());
-        dMap.put("companyIdx", user.companyIdx());
+        dMap.put("oid", user.getOid());
+        dMap.put("tid", user.getTid());
+        dMap.put("companyIdx", user.getCompanyIdx());
         int affectedSecond = mapper.upsertLeaveType(dMap);
 
         // 6. ERP 데이터를 최소 한건이라도 반영됐다면 DB에 더 이상 없는 항목 비활성화
@@ -127,8 +127,8 @@ public class LeaveServiceImpl implements LeaveService {
         int rows = (Integer) params.getOrDefault("rows", 15);
 
         Map<String, Object> map = new HashMap<>();
-        map.put("oid", user.oid());
-        map.put("companyIdx", user.companyIdx());
+        map.put("oid", user.getOid());
+        map.put("companyIdx", user.getCompanyIdx());
         map.put("keyword", params.get("keyword"));
         map.put("unitType", params.get("unitType"));
         map.put("active", params.get("active"));
@@ -150,9 +150,9 @@ public class LeaveServiceImpl implements LeaveService {
     @Override
     public Map<String, Object> createLeaveType(RequestUser user, Map<String, Object> params) {
         Map<String, Object> map = new HashMap<>();
-        map.put("oid", user.oid());
-        map.put("companyIdx", user.companyIdx());
-        map.put("tid", user.tid());
+        map.put("oid", user.getOid());
+        map.put("companyIdx", user.getCompanyIdx());
+        map.put("tid", user.getTid());
         map.put("name", params.get("name"));
         map.put("code", params.get("code"));
         map.put("unitType", params.get("unitType"));
@@ -169,8 +169,8 @@ public class LeaveServiceImpl implements LeaveService {
     @Override
     public LeaveTypeDto getLeaveTypeByCode(RequestUser user, Map<String, Object> params) {
         Map<String, Object> map = new HashMap<>();
-        map.put("tid", user.tid());
-        map.put("companyIdx", user.companyIdx());
+        map.put("tid", user.getTid());
+        map.put("companyIdx", user.getCompanyIdx());
         map.put("code", params.get("code"));
 
         return mapper.getLeaveTypeByCode(map);
@@ -179,8 +179,8 @@ public class LeaveServiceImpl implements LeaveService {
     @Override
     public List<LeaveTypeDto> getLeaveType(RequestUser user) {
         Map<String, Object> map = new HashMap<>();
-        map.put("companyIdx", user.companyIdx());
-        map.put("tid", user.tid());
+        map.put("companyIdx", user.getCompanyIdx());
+        map.put("tid", user.getTid());
 
         return mapper.getLeaveType(map);
     }
@@ -188,9 +188,9 @@ public class LeaveServiceImpl implements LeaveService {
     @Override
     public Map<String, Object> updateLeaveType(RequestUser user, Map<String, Object> params) {
         Map<String, Object> map = new HashMap<>();
-        map.put("oid", user.oid());
-        map.put("companyIdx", user.companyIdx());
-        map.put("tid", user.tid());
+        map.put("oid", user.getOid());
+        map.put("companyIdx", user.getCompanyIdx());
+        map.put("tid", user.getTid());
         map.put("name", params.get("name"));
         map.put("code", params.get("code"));
         map.put("unitType", params.get("unitType"));
@@ -208,7 +208,7 @@ public class LeaveServiceImpl implements LeaveService {
     @Override
     public Map<String, Object> updateStatus(RequestUser user, Map<String, Object> params) {
         Map<String, Object> map = new HashMap<>();
-        map.put("companyIdx", user.companyIdx());
+        map.put("companyIdx", user.getCompanyIdx());
         map.put("code", params.get("code"));
         map.put("activeYn", params.get("activeYn"));
 
@@ -220,8 +220,8 @@ public class LeaveServiceImpl implements LeaveService {
     @Override
     public Map<String, Object> deleteLeaveType(RequestUser user, Map<String, Object> params) {
         Map<String, Object> map = new HashMap<>();
-        map.put("tid", user.tid());
-        map.put("companyIdx", user.companyIdx());
+        map.put("tid", user.getTid());
+        map.put("companyIdx", user.getCompanyIdx());
         map.put("codeList", params.get("codeList"));
 
         int count = mapper.deleteLeaveType(map);

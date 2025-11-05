@@ -1,11 +1,18 @@
 package com.of.attendLeave.modules.user;
 
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
 import java.util.List;
 
-public record RequestUser(
-        String oid,
-        int companyIdx,
-        String tid,
-        String deptCode,
-        List<String> roles
-) {}
+@Getter
+@AllArgsConstructor
+@NoArgsConstructor
+public class RequestUser {
+        private String oid;
+        private int companyIdx;
+        private String tid;
+        private String deptCode;
+        private List<String> roles;
+}

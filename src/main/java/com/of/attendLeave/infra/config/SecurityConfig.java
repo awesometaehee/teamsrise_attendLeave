@@ -5,11 +5,8 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jws;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.security.servlet.PathRequest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -22,6 +19,7 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.SecurityFilterChain;
@@ -31,18 +29,38 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+import javax.servlet.FilterChain;
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.security.KeyFactory;
 import java.security.PublicKey;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Configuration
 @RequiredArgsConstructor
 @EnableMethodSecurity
 public class SecurityConfig {
+
+    @Value("${security.internal-jwt.audience-expected}")
+    private String audience;
+
+    @Value("#{'${security.internal-jwt.issuers-allowed}'.split(',')}")
+    private List<String> issuer;
+
+    @Value("${security.internal-jwt.jwks[0].public-key-path}")
+    private String keyPath;
 
     @Bean
     public WebSecurityCustomizer webSecurityCustomizer() {
@@ -53,8 +71,8 @@ public class SecurityConfig {
     SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         return http
                 .cors(Customizer.withDefaults())
-                .csrf(csrf -> csrf.disable())
-                .authorizeHttpRequests(a -> a.requestMatchers("/actuator/**").permitAll().anyRequest().authenticated())
+                .csrf().disable()
+                .authorizeHttpRequests(a -> a.mvcMatchers("/actuator/**").permitAll().anyRequest().authenticated())
                 .addFilterBefore(internalJwtFilter(), UsernamePasswordAuthenticationFilter.class)
                 .build();
     }
@@ -62,7 +80,7 @@ public class SecurityConfig {
     @Bean
     OncePerRequestFilter internalJwtFilter() {
         return new OncePerRequestFilter() {
-            final PublicKey publicKey = loadPublicKey("/keys/internal-jwt-public.pem");
+            final PublicKey publicKey = loadPublicKey(keyPath);
 
             @Override
             protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res, FilterChain chain) throws ServletException, IOException {
@@ -71,16 +89,23 @@ public class SecurityConfig {
                     res.sendError(401, "Missing internal token");
                     return;
                 }
+
                 String token = auth.substring(7);
                 try {
                     Jws<Claims> jws = Jwts.parserBuilder()
                             .setSigningKey(publicKey)
-                            .requireIssuer("gw.internal")
                             .build()
                             .parseClaimsJws(token);
 
                     Claims c = jws.getBody();
-                    if (!"attn.internal".equals(c.getAudience())) {
+
+                    String iss = c.getIssuer();
+                    if(iss == null || issuer.stream().noneMatch(iss::equals)) {
+                        res.sendError(401, "Invalid issuer");
+                        return;
+                    }
+
+                    if (!audience.equals(c.getAudience())) {
                         res.sendError(401, "Invalid audience");
                         return;
                     }
@@ -88,9 +113,9 @@ public class SecurityConfig {
                     var roles = (List<String>) c.getOrDefault("roles", List.of());
                     var auths = roles.stream()
                             .map(r -> new SimpleGrantedAuthority("ROLE_" + r.toUpperCase()))
-                            .toList();
+                            .collect(Collectors.toList());
 
-                    var user = new RequestUser(
+                    RequestUser user = new RequestUser(
                             c.getSubject(),
                             c.get("company_idx", Integer.class),
                             c.get("tid", String.class),
@@ -98,7 +123,7 @@ public class SecurityConfig {
                             roles
                     );
 
-                    var authentication = new UsernamePasswordAuthenticationToken(user, "N/A", auths);
+                    Authentication authentication = new UsernamePasswordAuthenticationToken(user, "N/A", auths);
                     SecurityContextHolder.getContext().setAuthentication(authentication);
                     chain.doFilter(req, res);
                 } catch (JwtException e) {
@@ -109,13 +134,40 @@ public class SecurityConfig {
     }
 
     private PublicKey loadPublicKey(String classpathPem) {
+        System.out.println("------------------");
+        System.out.println(classpathPem);
+        System.out.println("------------------");
         try {
+            byte[] bytes;
+            if (classpathPem.startsWith("classpath:")) {
+                String cp = classpathPem.substring("classpath:".length());
+                if (!cp.startsWith("/")) cp = "/" + cp;
+                InputStream in = this.getClass().getResourceAsStream(cp);
+                if (in == null) throw new FileNotFoundException("Classpath resource not found: " + cp);
+                bytes = in.readAllBytes();
+            } else if (classpathPem.startsWith("file:")) {
+                bytes = Files.readAllBytes(Paths.get(URI.create(classpathPem)));
+            } else {
+                // 절대/상대 파일 경로
+                bytes = Files.readAllBytes(Paths.get(classpathPem));
+            }
+
+            String pem = new String(bytes, StandardCharsets.UTF_8);
+            String clean = pem.replaceAll("-----BEGIN (.*)-----", "")
+                    .replaceAll("-----END (.*)-----", "")
+                    .replaceAll("\\s", "");
+            byte[] der = java.util.Base64.getDecoder().decode(clean);
+            java.security.KeyFactory kf = java.security.KeyFactory.getInstance("RSA"); // ES256이면 "EC"
+            return kf.generatePublic(new java.security.spec.X509EncodedKeySpec(der));
+
+            /*
             String pub = new String(Objects.requireNonNull(
                     this.getClass().getResourceAsStream(classpathPem)).readAllBytes());
             pub = pub.replaceAll("-----\\w+ PUBLIC KEY-----", "").replaceAll("\\s", "");
             byte[] der = Base64.getDecoder().decode(pub);
             KeyFactory kf = KeyFactory.getInstance("RSA");
             return kf.generatePublic(new X509EncodedKeySpec(der));
+            */
         } catch (Exception e) { throw new RuntimeException(e); }
     }
 
@@ -138,11 +190,13 @@ public class SecurityConfig {
      */
     @Bean
     public RoleHierarchy roleHierarchy() {
-        return RoleHierarchyImpl.fromHierarchy("""
-                ROLE_SUPER_CORP > ROLE_SUPER
-                ROLE_SUPER > ROLE_CORP
-                ROLE_CORP > ROLE_NONE
-                """);
+        RoleHierarchyImpl h = new RoleHierarchyImpl();
+        h.setHierarchy(
+            "ROLE_SUPER_CORP > ROLE_SUPER\n" +
+            "ROLE_SUPER > ROLE_CORP\n" +
+            "ROLE_CORP > ROLE_NONE"
+        );
+        return h;
     }
 
     /**

@@ -44,9 +44,9 @@ public class AttnController {
     @PreAuthorize("hasRole('NONE')")
     public ResponseApiUtil<?> updateCommuteByOid(@AuthenticationPrincipal RequestUser user, @RequestBody Map<String, Object> params) {
         Map<String, Object> map = new HashMap<>();
-        map.put("oid", user.oid());
-        map.put("tid", user.tid());
-        map.put("companyIdx", user.companyIdx());
+        map.put("oid", user.getOid());
+        map.put("tid", user.getTid());
+        map.put("companyIdx", user.getCompanyIdx());
         map.put("type", params.get("type"));
         map.put("timestamp", params.get("timestamp"));
         map.put("source", params.get("source"));

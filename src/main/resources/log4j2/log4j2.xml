@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Configuration status="INFO">
+<Configuration status="WARN">
     <Properties>
-        <Property name="LOG_PATH">logs</Property>
+        <Property name="PROFILE">${spring:profiles.active:-unknown}</Property>
+        <Property name="LOG_DIR">/var/lib/leave_attn/logs</Property>
         <Property name="DEFAULT_PATTERN">[%d{yyyy-MM-dd HH:mm:ss.SSS}] %5p %pid --- [%15.15t] %-40.40c{1.} : %m%n%throwable</Property>
         <!-- 색상: Log4j2는 %highlight / %style 사용 -->
         <Property name="COLOR_PATTERN">%style{[%d{yyyy-MM-dd HH:mm:ss.SSS}]}{dim} %highlight{%-5level}{FATAL=bg_red, ERROR=red, WARN=yellow, INFO=green, DEBUG=blue, TRACE=black} %style{%pid}{magenta} %style{---}{dim} %style{[%15.15t]}{dim} %style{%-40.40c{1.}}{cyan} %style{:}{dim} %m%n%throwable</Property>
@@ -12,19 +13,23 @@
             <PatternLayout pattern="${COLOR_PATTERN}" disableAnsi="false"/>
         </Console>
 
-        <RollingFile name="RollingFileAppender" fileName="${LOG_PATH}/app.log"
-                     filePattern="${LOG_PATH}/app.%d{yyyy-MM-dd-HH}.%i.log.gz">
+        <RollingFile name="File" fileName="${LOG_DIR}/app-${PROFILE}.log"
+                     filePattern="${LOG_DIR}/app-${PROFILE}-%d{yyyy-MM-dd}-%i.log.gz">
             <PatternLayout pattern="${DEFAULT_PATTERN}"/>
             <Policies>
                 <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
                 <SizeBasedTriggeringPolicy size="100MB"/>
             </Policies>
-            <DefaultRolloverStrategy>
-                <Delete basePath="${LOG_PATH}" maxDepth="1">
-                    <IfAccumulatedFileCount exceeds="3"/>
-                </Delete>
+            <DefaultRolloverStrategy max="30">
+                <!-- <Delete basePath="${LOG_DIR}" maxDepth="1">
+                    <IfFileName glob="app-${PROFILE}-*.log.gz"/>
+                    <IfAccumulatedFileCount exceeds="30"/>
+                </Delete> -->
             </DefaultRolloverStrategy>
         </RollingFile>
+        <Console name="SqlConsole" target="SYSTEM_OUT" follow="true">
+            <PatternLayout pattern="[%d{HH:mm:ss.SSS}] %-5level SQL - %msg%n" />
+        </Console>
     </Appenders>
 
     <Loggers>
